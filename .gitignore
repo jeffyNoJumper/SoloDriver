@@ -1,0 +1,25 @@
+# Compiled Object files
+*.o
+*.obj
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Libraries
+*.a
+*.lib
+*.so
+*.dylib
+
+# Build directories
+build/
+cmake-build-*/
+
+# IDE
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
