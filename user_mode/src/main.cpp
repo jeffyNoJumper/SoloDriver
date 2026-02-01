@@ -53,9 +53,17 @@ int main()
 	// Your code here
 	
 	if (driver.attach_to_process(process.pid))
-	{
+{
+    uintptr_t base = driver.get_module_base("Notepad.exe");
 
-	}
+    offsets::init(driver, base);
+
+    while (true)
+    {
+        features::tick(driver, base);
+        Sleep(10); // efficient
+    }
+}
 
     // End
 
