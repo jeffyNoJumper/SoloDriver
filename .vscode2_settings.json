@@ -1,10 +1,10 @@
 {
-  "gitRemoteURL" : "https:\/\/github.com\/jeffyNoJumper\/SoloDriver",
   "selectedGitignoreTemplate" : "C\/C++",
   "environmentVariables" : [
 
   ],
   "gitUserName" : "JeffeyNoJumper",
   "isGitEnabled" : true,
-  "gitUserEmail" : "mc43@gmail.com"
+  "gitUserEmail" : "mc43@gmail.com",
+  "gitRemoteURL" : "https:\/\/github.com\/jeffyNoJumper\/SoloDriver"
 }
