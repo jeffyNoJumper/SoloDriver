@@ -36,8 +36,33 @@ extern "C" {
         RtlInitUnicodeString(&sym_link, L"\\DosDevices\\SoloKnight");
 
         // Create the device
-        IoCreateDevice(driver_obj, 0, &dev_name, FILE_DEVICE_UNKNOWN, FILE_DEVICE_SECURE_OPEN, FALSE, &driver_obj->DeviceObject);
-        IoCreateSymbolicLink(&sym_link, &dev_name);
+        NTSTATUS status;
+
+status = IoCreateDevice(
+    driver_obj,
+    0,
+    &dev_name,
+    FILE_DEVICE_UNKNOWN,
+    FILE_DEVICE_SECURE_OPEN,
+    FALSE,
+    &driver_obj->DeviceObject
+);
+
+if (!NT_SUCCESS(status))
+{
+    DbgPrint("[-] IoCreateDevice failed\n");
+    return status;
+}
+
+status = IoCreateSymbolicLink(&sym_link, &dev_name);
+
+if (!NT_SUCCESS(status))
+{
+    DbgPrint("[-] IoCreateSymbolicLink failed\n");
+    IoDeleteDevice(driver_obj->DeviceObject);
+    return status;
+}
+
 
         // Set up the "Communication" functions
         driver_obj->MajorFunction[IRP_MJ_CREATE] = create_close;
