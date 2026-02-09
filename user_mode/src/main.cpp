@@ -14,62 +14,60 @@
 
 int main()
 {
-	const char* process_name = "Notepad.exe";
-	Process process(process_name);
+    const char* process_name = "cod.exe";
+
+    ioctl::Driver driver;
+
+    if (driver.driver_handle == INVALID_HANDLE_VALUE)
+    {
+        std::cout << "[-] Failed to create driver handle\n";
+        return 1;
+    }
+
+    std::cout << "[*] Waiting for game...\n";
+
+    DWORD pid = 0;
+
+    // Wait for real game process
+
+    while (!pid)
+    {
+        pid = Process::GetProcessIdByName(process_name);
+        Sleep(1000); // don't burn CPU
+    }
+
+    std::cout << "[+] Found process PID: " << pid << "\n";
+
+    // Attach driver
+    if (!driver.attach_to_process(pid))
+    {
+        std::cout << "[-] Failed attaching driver\n";
+        return 1;
+    }
+
+    std::cout << "[+] Attached to process\n";
+
+    // Wait for module base
 	
-	ioctl::Driver driver;
+    uintptr_t base = 0;
 
-	// Check if process is Valid
-	if (process.handle == INVALID_HANDLE_VALUE)
-	{
-		std::string errorMsg = GetErrorString(GetLastError());
+    while (!base)
+    {
+        base = driver.get_module_base(process_name);
+        Sleep(500);
+    }
 
-		std::cout << "[-] Failed to create process handle: " << errorMsg;
-		return 1;
-	}
+    std::cout << "[+] Module base: 0x" << std::hex << base << "\n";
 
-	// Optional: Print all modules loaded into the process. Remove if not needed.
-	{
-		std::cout << "\n--------------------------------------\n";
-
-		std::cout << "Modules loaded into " << process_name << ": \n";
-		process.PrintAllModules(true);
-
-		std::cout << "--------------------------------------\n\n";
-	}
-	
-
-
-	// Check if driver handle is valid
-	if (driver.driver_handle == INVALID_HANDLE_VALUE)
-	{
-		std::string errorMsg = GetErrorString(GetLastError());
-
-		std::cout << "[-] Failed to create driver handle: " << errorMsg << '\n';
-		std::cin.get();
-		return 1;
-	}
-
-	// Your code here
-	
-	if (driver.attach_to_process(process.pid))
- {
-    uintptr_t base = driver.get_module_base("Notepad.exe");
-
+    // Init + loop
+    
     offsets::init(driver, base);
 
     while (true)
     {
         features::tick(driver, base);
-        Sleep(10); // efficient
+        Sleep(10);
     }
-}
 
-    // End
-
-	std::cout << "End of Usermode Application.\n";
-	std::cin.get();
-
-	return 0;
-
+    return 0;
 }
