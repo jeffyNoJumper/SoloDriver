@@ -1,49 +1,48 @@
 #include "../headers/driver_helper.h"
 
-// Define the handle that the header's 'extern' refers to
-HANDLE driver_handle = nullptr;
-
 namespace ioctl
 {
-    namespace codes
+    // We no longer use CTL_CODEs or handles. 
+    // We use a "Magic" number and an Instruction ID.
+
+    // This is the function signature for the Windows syscall we hijacked
+    typedef __int64(NTAPI* t_hooked_func)(uintptr_t magic, void* request);
+
+    bool Driver::initialize()
     {
-        ULONG attach = CTL_CODE(FILE_DEVICE_UNKNOWN, 0x696, METHOD_BUFFERED, FILE_SPECIAL_ACCESS);
-        ULONG read = CTL_CODE(FILE_DEVICE_UNKNOWN, 0x697, METHOD_BUFFERED, FILE_SPECIAL_ACCESS);
-        ULONG write = CTL_CODE(FILE_DEVICE_UNKNOWN, 0x698, METHOD_BUFFERED, FILE_SPECIAL_ACCESS);
+        // We don't "open" the driver anymore. 
+        // We just check if our hook is alive by sending a test 'attach' to PID 0.
+        driver_request r = { 0 };
+        r.instruction = 99; // A special "Ping" code
+
+        auto nt_func = (t_hooked_func)GetProcAddress(GetModuleHandleA("win32u.dll"), "NtUserCopyAcceleratorTable");
+        
+        if (!nt_func) return false;
+
+        // If the driver is there, it will catch the MAGIC_CODE and return a specific value
+        return nt_func(MAGIC_CODE, &r) == 0xACE; 
     }
 
-    // Call this first to connect to your SoloKnight driver
-    bool initialize()
-    {
-        // Must match the SymLink L"\\DosDevices\\SoloKnight" in your main.cpp
-        driver_handle = CreateFileA("\\\\.\\SoloKnight", 
-            GENERIC_READ | GENERIC_WRITE, 
-            FILE_SHARE_READ | FILE_SHARE_WRITE, 
-            nullptr, 
-            OPEN_EXISTING, 
-            FILE_ATTRIBUTE_NORMAL, 
-            nullptr);
-
-        if (driver_handle == INVALID_HANDLE_VALUE) {
-            return false;
-        }
-        return true;
-    }
-
-    // Definition for the attach logic
-    bool attach_to_process(uint32_t pid)
+    bool Driver::attach_to_process(uint32_t pid)
     {
         driver_request r;
         r.process_id = pid;
+        r.instruction = 0; // 0 = ATCH
 
-        // Sends the request to the kernel's IRP_MJ_DEVICE_CONTROL handler
-        return DeviceIoControl(
-            driver_handle, 
-            codes::attach, 
-            &r, sizeof(r), 
-            &r, sizeof(r), 
-            nullptr, 
-            nullptr
-        );
+        auto nt_func = (t_hooked_func)GetProcAddress(GetModuleHandleA("win32u.dll"), "NtUserCopyAcceleratorTable");
+        return nt_func(MAGIC_CODE, &r) == 0;
+    }
+
+    uintptr_t Driver::get_module_base(const char* module_name)
+    {
+        driver_request r;
+        r.instruction = 3; // 3 = BASE
+        // We pass the module name in the target field (or use a separate buffer)
+        r.target = (PVOID)module_name; 
+
+        auto nt_func = (t_hooked_func)GetProcAddress(GetModuleHandleA("win32u.dll"), "NtUserCopyAcceleratorTable");
+        nt_func(MAGIC_CODE, &r);
+        
+        return (uintptr_t)r.buffer; // Driver writes the base address back into r.buffer
     }
 }
