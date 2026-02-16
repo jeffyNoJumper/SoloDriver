@@ -2,20 +2,14 @@
 #include <Windows.h>
 #include <iostream>
 
-// The shared handle for communication
-extern HANDLE driver_handle;
+// We no longer need a HANDLE to a device!
+// extern HANDLE driver_handle; 
 
 namespace ioctl
 {
-    namespace codes
-    {
-        // Definitions must exist in driver_helper.cpp
-        extern ULONG attach;
-        extern ULONG read;
-        extern ULONG write;
-    }
+    // The "Magic" code that tells the hooked function to run our cheat logic
+    #define MAGIC_CODE 0xDEADBEEF69
 
-    // Force 1-byte alignment so Kernel and User mode see the struct the same way
     #pragma pack(push, 1)
     struct driver_request
     {
@@ -23,10 +17,13 @@ namespace ioctl
         PVOID target;
         PVOID buffer;
         SIZE_T size;
+        uint32_t instruction; // 0 for attach, 1 for read, 2 for write
     };
     #pragma pack(pop)
 
-    // Template for Reading Memory
+    // This points to the Windows function we hijacked (e.g., NtUserCopyAcceleratorTable)
+    typedef __int64(NTAPI* t_hooked_func)(uintptr_t magic, void* request);
+
     template <typename T>
     T read(uintptr_t address)
     {
@@ -35,12 +32,15 @@ namespace ioctl
         r.target = reinterpret_cast<PVOID>(address);
         r.buffer = &buffer;
         r.size = sizeof(T);
+        r.instruction = 1; // Read code
 
-        DeviceIoControl(driver_handle, codes::read, &r, sizeof(r), &r, sizeof(r), nullptr, nullptr);
+        // Get the function pointer from win32u.dll
+        static auto nt_func = (t_hooked_func)GetProcAddress(GetModuleHandleA("win32u.dll"), "NtUserCopyAcceleratorTable");
+        
+        nt_func(MAGIC_CODE, &r);
         return buffer;
     }
 
-    // Template for Writing Memory
     template <typename T>
     void write(uintptr_t address, T value)
     {
@@ -48,16 +48,22 @@ namespace ioctl
         r.target = reinterpret_cast<PVOID>(address);
         r.buffer = &value;
         r.size = sizeof(T);
+        r.instruction = 2; // Write code
 
-        DeviceIoControl(driver_handle, codes::write, &r, sizeof(r), &r, sizeof(r), nullptr, nullptr);
+        static auto nt_func = (t_hooked_func)GetProcAddress(GetModuleHandleA("win32u.dll"), "NtUserCopyAcceleratorTable");
+        
+        nt_func(MAGIC_CODE, &r);
     }
 
-    // Function to attach to a process
     inline bool attach(uint32_t pid)
     {
         driver_request r;
         r.process_id = pid;
+        r.instruction = 0; // Attach code
 
-        return DeviceIoControl(driver_handle, codes::attach, &r, sizeof(r), &r, sizeof(r), nullptr, nullptr);
+        static auto nt_func = (t_hooked_func)GetProcAddress(GetModuleHandleA("win32u.dll"), "NtUserCopyAcceleratorTable");
+        
+        // If the driver is loaded and hooked, it returns 0 (or your custom success code)
+        return nt_func(MAGIC_CODE, &r) == 0;
     }
 }
