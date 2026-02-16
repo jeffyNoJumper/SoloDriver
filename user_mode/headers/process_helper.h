@@ -2,29 +2,44 @@
 #define PROCESS_H
 
 #include <windows.h>
+#include <tlhelp32.h>
 #include <string>
 #include <map>
 
 class Process
 {
 public:
-    const char* name;         // Name of the process
-    DWORD pid;                // Process ID
-    HANDLE handle;            // Handle to the process
-    std::map<std::string, uintptr_t> modules; // Map to store modules and their base addresses
+    const char* name;
+    DWORD pid;
+    // Removed: HANDLE handle; // Opening a handle to cod.exe is a detection vector!
 
-public:
-    // Get Process by name
     Process(const char* name);
 
-    // Function to get all loaded modules of the process
-    bool GetModules();
+    // Static helper to find PID using snapshots (safe)
+    static DWORD GetProcessIdByName(const char* process_name) {
+        PROCESSENTRY32 entry;
+        entry.dwSize = sizeof(PROCESSENTRY32);
 
-    // Prints all the Modules that are in the "modules" map, with addresses optionally
-    void PrintAllModules(bool print_addresses=false);
+        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
+        if (snapshot == INVALID_HANDLE_VALUE) return 0;
 
-    // Close handle if on object Destruction.
+        if (Process32First(snapshot, &entry)) {
+            while (Process32Next(snapshot, &entry)) {
+                if (_stricmp(entry.szExeFile, process_name) == 0) {
+                    CloseHandle(snapshot);
+                    return entry.th32ParentProcessID; // Return the ID
+                }
+            }
+        }
+
+        CloseHandle(snapshot);
+        return 0;
+    }
+
+    // We rely on the driver to get module bases now
+    uintptr_t GetModuleBase(const char* module_name);
+
     ~Process();
 };
 
-#endif // PROCESS_H
+#endif
